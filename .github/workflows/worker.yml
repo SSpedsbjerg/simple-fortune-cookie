@@ -4,9 +4,17 @@ on:
     branches:
       - main
       - Build-Go
+      - DockerLogin
   pull_request:
     branches:
       - main
+
+env:
+  docker_username: spedsbjerg
+  docker_password: ${{ secrets.DOCKER_PASSWORD }}
+  docker_repo: simple_fortune_cookie
+  GIT_COMMIT: ${{ github.sha }}
+
 jobs:
   GetGo:
     runs-on: ubuntu-latest
@@ -34,6 +42,7 @@ jobs:
         with:
           name: FrontBuild
           path: .
+
   TestFrontEnd:
     runs-on: ubuntu-latest
     needs: BuildFrontEnd
@@ -56,6 +65,7 @@ jobs:
         with:
           name: BackBuild
           path: .
+
   TestBackEnd:
     runs-on: ubuntu-latest
     needs: BuildBackEnd
@@ -66,3 +76,37 @@ jobs:
         working-directory: backend
         run: go test -v .
 
+  PushToDuckerHub:
+    runs-on: ubuntu-latest
+    needs: [TestBackEnd, TestFrontEnd]
+    steps:
+      - name: Check out Repo
+        uses: actions/checkout@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9 #https://docs.github.com/en/actions/publishing-packages/publishing-docker-images
+        with:
+          username: ${{env.docker_username}}
+          password: ${{env.docker_password}}
+        
+      - name: Extract Metadata for Docker
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: ghcr.io/backend | ghcr.io/frontend
+           
+      - name: Build and Push Frontend #starting with frontend, if it works, try both
+        uses: docker/build-push-action@v2
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: spedsbjerg/simple_fortune_cookie:Frontend
+
+      - name: Build and Push Backend
+        uses: docker/build-push-action@v2
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: spedsbjerg/simple_fortune_cookie:Backend
